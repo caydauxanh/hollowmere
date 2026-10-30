@@ -1,0 +1,20 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://world/home.gd" id="1_vil"]
+[ext_resource type="Script" path="res://player/player.gd" id="2_ply"]
+[ext_resource type="Script" path="res://player/camera_rig.gd" id="3_cam"]
+[ext_resource type="Script" path="res://ui/hud.gd" id="4_hud"]
+
+[node name="Home" type="Node3D"]
+script = ExtResource("1_vil")
+
+[node name="Player" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 1)
+script = ExtResource("2_ply")
+
+[node name="CameraRig" type="Node3D" parent="."]
+script = ExtResource("3_cam")
+target_path = NodePath("../Player")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("4_hud")
