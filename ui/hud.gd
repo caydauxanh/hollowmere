@@ -348,7 +348,7 @@ func _process(delta: float) -> void:
 			_toast_time = 3.0 + minf(nxt.length() / 40.0, 3.0)
 			_toast.modulate.a = 1.0
 	_web_bridge(delta)
-	_dbg.text = "build 20261030-1542  ·  key: %s   mouse: %s   stick: %s   vel: %.1f" % [_last_key, _last_mouse, str(_stick_vec.snapped(Vector2(0.1, 0.1))), Vector2(player.velocity.x, player.velocity.z).length()]
+	_dbg.text = "build 20261030-2254  ·  key: %s   mouse: %s   stick: %s   vel: %.1f" % [_last_key, _last_mouse, str(_stick_vec.snapped(Vector2(0.1, 0.1))), Vector2(player.velocity.x, player.velocity.z).length()]
 
 
 func _unhandled_input(event: InputEvent) -> void:
