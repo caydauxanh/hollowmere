@@ -9,10 +9,19 @@ const MODEL_SCALE := 0.62          # Mage gốc cao 3m → ~1.85m
 
 @export var walk_speed := 3.2
 @export var run_speed := 6.0
-@export var accel := 22.0
-@export var decel := 30.0
+@export var accel := 16.0
+@export var decel := 24.0
 @export var jump_velocity := 6.5
-@export var turn_speed := 14.0
+@export var turn_speed := 11.0
+
+const COYOTE := 0.12        # may still jump this long after stepping off an edge
+const JUMP_BUFFER := 0.15   # a jump pressed this early before landing still fires
+var _coyote_t := 0.0
+var _jump_buf := 0.0
+var _lean := 0.0
+var _path: Array[Vector3] = []
+var _wp := 0
+var _nav: NavGrid
 
 var gravity: float = 18.0
 var _anim: AnimationPlayer
@@ -33,8 +42,19 @@ var _scarf: MeshInstance3D
 
 signal interacted
 
-## Click-to-move target (set by HUD when the player clicks the ground).
-var move_target := Vector3.INF
+## Click-to-move target (set by HUD when the player clicks the ground). Routed through the NavGrid
+## so a tap on the far side of a house walks around it.
+var move_target := Vector3.INF:
+	set(v):
+		move_target = v
+		_path = []
+		_wp = 0
+		if v != Vector3.INF:
+			if _nav == null and is_inside_tree():
+				_nav = NavGrid.get_for(get_tree())
+			_path = _nav.find_path(global_position, v) if _nav and _nav.built else [v]
+			if _path.is_empty():
+				_path = [v]
 
 
 func _ready() -> void:
@@ -74,6 +94,11 @@ func _ready() -> void:
 	col.shape = cap
 	col.position.y = 0.9
 	add_child(col)
+	collision_mask = 1 | 2            # scenery and walkers (villagers, cats, sheep)
+	floor_snap_length = 0.45          # stay glued to ramps and small bumps instead of hopping
+	floor_constant_speed = true       # slopes do not slow you down
+	floor_max_angle = deg_to_rad(50.0)
+	wall_min_slide_angle = deg_to_rad(8.0)   # brushing a wall at a shallow angle slides along it
 
 	_foot = _audio(["res://assets/sounds/footstep_concrete_000.ogg", "res://assets/sounds/footstep_concrete_001.ogg", "res://assets/sounds/footstep_concrete_002.ogg"], -6.0)
 	_land = _audio(["res://assets/sounds/land.ogg"], -4.0)
@@ -139,12 +164,24 @@ func _physics_process(delta: float) -> void:
 		dir = (r * input.x - f * input.y).normalized()
 		move_target = Vector3.INF
 	elif move_target != Vector3.INF:
-		var to := move_target - global_position
-		to.y = 0.0
-		if to.length() < 0.4:
+		if _wp >= _path.size():
 			move_target = Vector3.INF
 		else:
-			dir = to.normalized()
+			# Cut corners: head for the farthest of the next waypoints that is in plain view.
+			if _nav and _nav.built and Engine.get_physics_frames() % 20 == 0:
+				for i in range(mini(_path.size() - 1, _wp + 3), _wp, -1):
+					if _nav.line_clear(global_position, _path[i]):
+						_wp = i
+						break
+			var to := _path[_wp] - global_position
+			to.y = 0.0
+			var last := _wp == _path.size() - 1
+			if to.length() < (0.4 if last else 0.7):
+				_wp += 1
+				if _wp >= _path.size():
+					move_target = Vector3.INF
+			else:
+				dir = to.normalized()
 
 	var busy := Time.get_ticks_msec() / 1000.0 < _busy_until
 	var running := Input.is_action_pressed("run")
@@ -157,35 +194,62 @@ func _physics_process(delta: float) -> void:
 		_fly(delta, dir)
 		return
 
+	# Walk-to-tap: slow down smoothly for the last metre so you stop on the spot, not past it.
+	if dir != Vector3.ZERO and move_target != Vector3.INF and _wp == _path.size() - 1:
+		var left := (move_target - global_position)
+		left.y = 0.0
+		speed = minf(speed, maxf(1.2, left.length() * 2.5))
 	var target := dir * speed
+	# Frame-rate independent smoothing: quick to get going, a touch quicker to stop.
+	var planar_v := Vector2(velocity.x, velocity.z)
+	var want := Vector2(target.x, target.z)
 	var rate := accel if dir != Vector3.ZERO else decel
-	velocity.x = move_toward(velocity.x, target.x, rate * delta)
-	velocity.z = move_toward(velocity.z, target.z, rate * delta)
+	# Reversing direction: brake first, so turns feel planted rather than skating.
+	if dir != Vector3.ZERO and planar_v.length() > 0.5 and planar_v.normalized().dot(want.normalized()) < -0.2:
+		rate = decel * 1.5
+	planar_v = planar_v.lerp(want, 1.0 - exp(-rate / 3.0 * delta))
+	velocity.x = planar_v.x
+	velocity.z = planar_v.y
 
+	_coyote_t = COYOTE if is_on_floor() else maxf(_coyote_t - delta, 0.0)
+	if Input.is_action_just_pressed("jump") and not busy:
+		_jump_buf = JUMP_BUFFER
+	else:
+		_jump_buf = maxf(_jump_buf - delta, 0.0)
 	if not is_on_floor():
-		velocity.y -= gravity * delta
-	elif Input.is_action_just_pressed("jump") and not busy:
+		# Hold to go higher, let go for a short hop; fall a little faster than you rise.
+		var g_mul := 1.0 if (velocity.y > 0.0 and Input.is_action_pressed("jump")) else 1.6
+		velocity.y -= gravity * g_mul * delta
+	if _jump_buf > 0.0 and _coyote_t > 0.0 and not busy:
 		velocity.y = jump_velocity
+		_jump_buf = 0.0
+		_coyote_t = 0.0
 		_play("Jump_Idle", 0.1)
 
 	move_and_slide()
 
-	# Quay mặt theo hướng đi
+	# Quay mặt theo hướng đi, nghiêng người nhẹ khi vào cua
+	var yaw_before := _skin.rotation.y
 	if dir.length() > 0.1:
 		var yaw := atan2(dir.x, dir.z)
-		_skin.rotation.y = lerp_angle(_skin.rotation.y, yaw, turn_speed * delta)
+		var k := 1.0 - exp(-turn_speed * delta)
+		_skin.rotation.y = lerp_angle(_skin.rotation.y, yaw, k)
+	var yaw_rate := angle_difference(yaw_before, _skin.rotation.y) / maxf(delta, 0.001)
+	var speed_frac := clampf(planar_v.length() / run_speed, 0.0, 1.0)
+	_lean = lerpf(_lean, clampf(-yaw_rate * 0.035 * speed_frac, -0.18, 0.18), 1.0 - exp(-8.0 * delta))
+	_skin.rotation.z = _lean
 
 	# Animation
 	var planar := Vector2(velocity.x, velocity.z).length()
 	if not busy:
 		if not is_on_floor():
 			_play("Jump_Idle", 0.2)
-		elif planar > 0.3:
+		elif planar > 0.25:
 			var run_anim := planar > walk_speed + 0.8
-			_play("Running_A" if run_anim else "Walking_A", 0.25)
-			_anim.speed_scale = clampf(planar / (run_speed if run_anim else walk_speed), 0.7, 1.25)
+			_play("Running_A" if run_anim else "Walking_A", 0.22)
+			_anim.speed_scale = clampf(planar / (run_speed if run_anim else walk_speed), 0.6, 1.25)
 		else:
-			_play("Idle", 0.3)
+			_play("Idle", 0.35)
 			_anim.speed_scale = 1.0
 
 	# Tiếng bước chân + bụi

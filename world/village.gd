@@ -85,7 +85,7 @@ func _ready() -> void:
 		ch.setup(cid)
 		add_child(ch)
 	for cinfo in [[Vector3(-14.0, 0, 9.5), Color(0.9, 0.6, 0.3)], [Vector3(26.0, 0, -5.0), Color(0.25, 0.22, 0.25)], [Vector3(-37.0, 0, 0.0), Color(0.85, 0.85, 0.8)]]:
-		var cat := Node3D.new()
+		var cat := CharacterBody3D.new()
 		cat.position = cinfo[0]
 		cat.set_script(load("res://world/cat.gd"))
 		cat.tint = cinfo[1]
@@ -782,6 +782,19 @@ func _in_district(p: Vector3) -> bool:
 	return false
 
 
+## Where villagers may route (NavGrid): the valley from Fernmoor to Ashford and the Watchtower.
+func nav_bounds() -> Rect2:
+	return Rect2(-80.0, -70.0, 156.0, 130.0)
+
+
+## Path cost for the NavGrid: roads, the square and the district greens are cheap, so villagers
+## keep to the lanes when there is one and only cut across grass when it is clearly shorter.
+func nav_cost(p: Vector3) -> float:
+	if _on_road(p, 4.0) or p.length() < 17.0 or _in_district(p):
+		return 1.0
+	return 1.8
+
+
 func _on_road(p: Vector3, width: float = 7.0) -> bool:
 	for rd in ROADS:
 		var a: Vector3 = rd[0]
@@ -1206,9 +1219,24 @@ func _place(path: String, pos: Vector3, s: float, rot_y: float) -> Node3D:
 	return n
 
 
+## One hex-pack fence piece centred on `p`, running along `dir`. The KayKit fence mesh sits on the edge
+## of a hex tile (one unit from its origin, along local -X, length along local Z), so the node is placed
+## one scaled unit to the side and turned so local Z follows `dir`; the automatic collider then matches
+## the picture exactly. A gate piece has its door leaf hidden, leaving an open gateway between posts.
+func _fence_piece(p: Vector3, dir: Vector3, gate: bool = false) -> Node3D:
+	var s := B * 0.5
+	var yaw := atan2(dir.x, dir.z)
+	var node_pos := p + Vector3(cos(yaw), 0, -sin(yaw)) * s
+	var f := _place(HEX + ("buildings/neutral/fence_wood_straight_gate.gltf" if gate else "buildings/neutral/fence_wood_straight.gltf"), node_pos, s, yaw)
+	if gate:
+		for d in f.find_children("*door*", "", true, false):
+			(d as Node3D).visible = false
+	return f
+
+
 ## Everything you can bump into gets a collider automatically (buildings, walls, fences, rocks, crates…).
 ## Walkable or tiny things are skipped: tiles, paths, flags, clouds, water plants, small decor.
-const WALKABLE_HINTS := ["floor", "path_", "hex_", "flag_", "cloud", "waterlily", "waterplant", "pumpkin", "candle", "bottle", "coin", "plate", "bone", "skull", "lantern_hanging", "arch", "bridge", "fence_gate", "ribcage", "mountain", "hills", "hill_single", "banner", "sack", "plaque", "key", "grass"]
+const WALKABLE_HINTS := ["floor", "path_", "hex_", "flag_", "cloud", "waterlily", "waterplant", "pumpkin", "candle", "bottle", "coin", "plate", "bone", "skull", "lantern_hanging", "arch", "bridge", "fence_gate", "straight_gate", "ribcage", "mountain", "hills", "hill_single", "banner", "sack", "plaque", "key", "grass"]
 
 func _is_solid(path: String) -> bool:
 	var f := path.get_file().to_lower()
@@ -1536,15 +1564,15 @@ func _build_ashford(c: Vector3) -> void:
 	for sp in spots:
 		var h := _place(HEX + sp[0], c + sp[1], B, deg_to_rad(sp[2]))
 		_collider(h, Vector3(0, 0.4, 0), Vector3(0.9, 0.8, 0.9))
-	# Sheep pen
+	# Sheep pen: a ring of fence pieces with one opening (i == 3) to lead the stubborn sheep home through
 	var pc := c + Vector3(-9.7, 0, -10.1)
-	for i in 12:
-		var a := i * TAU / 12.0
-		var f := _place(HEX + "buildings/neutral/fence_wood_straight.gltf", pc + Vector3(cos(a) * 7.0, 0, sin(a) * 7.0), B * 0.5, a + PI / 2.0)
-		if i != 3:
-			_collider(f, Vector3(0, 0.3, 0), Vector3(1.0, 0.6, 0.2))
+	for i in 14:
+		if i == 3:
+			continue
+		var a := i * TAU / 14.0
+		_fence_piece(pc + Vector3(cos(a), 0, sin(a)) * 6.5, Vector3(-sin(a), 0, cos(a)))
 	for i in 6:
-		var sh := Node3D.new()
+		var sh := CharacterBody3D.new()
 		sh.set_script(load("res://world/sheep.gd"))
 		sh.pen_center = pc
 		sh.pen_radius = 5.0

@@ -9,6 +9,7 @@ extends Node3D
 
 var yaw := 0.0
 var pitch := -0.42
+var _lead := Vector3.ZERO
 var _arm: SpringArm3D
 var _cam: Camera3D
 var _target: Node3D
@@ -65,11 +66,23 @@ func _process(delta: float) -> void:
 	yaw -= pan.x * 2.0 * delta
 	pitch = clampf(pitch - pan.y * 1.2 * delta, min_pitch, max_pitch)
 	var vel: Vector3 = _target.velocity if _target is CharacterBody3D else Vector3.ZERO
-	var goal := _target.global_position + Vector3(0, 1.4, 0) + Vector3(vel.x, 0, vel.z) * 0.12
-	var k := 1.0 - exp(-follow_speed * delta)   # frame-rate independent smoothing
-	global_position = global_position.lerp(goal, k)
-	_arm.spring_length = lerpf(_arm.spring_length, distance, 8.0 * delta)
+	var planar := Vector3(vel.x, 0, vel.z)
+	# Look a little ahead of the way you are moving; eased so it never jerks when you stop.
+	_lead = _lead.lerp(planar * 0.14, 1.0 - exp(-3.0 * delta))
+	var goal := _target.global_position + Vector3(0, 1.4, 0) + _lead
+	# Vertical follow is softer than horizontal: jumps and small steps do not bob the camera.
+	var kh := 1.0 - exp(-follow_speed * delta)
+	var kv := 1.0 - exp(-follow_speed * 0.55 * delta)
+	var p := global_position
+	p.x = lerpf(p.x, goal.x, kh)
+	p.z = lerpf(p.z, goal.z, kh)
+	p.y = lerpf(p.y, goal.y, kv)
+	global_position = p
+	_arm.spring_length = lerpf(_arm.spring_length, distance, 1.0 - exp(-8.0 * delta))
 	if _cam:
+		# A touch wider when running, so speed reads on screen.
+		var speed_frac := clampf(planar.length() / 6.0, 0.0, 1.0)
+		_cam.fov = lerpf(_cam.fov, 52.0 + 5.0 * speed_frac * speed_frac, 1.0 - exp(-4.0 * delta))
 		RenderingServer.global_shader_parameter_set("focus_dist", _cam.global_position.distance_to(_target.global_position + Vector3(0, 1.0, 0)))
 	_apply()
 

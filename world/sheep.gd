@@ -1,5 +1,5 @@
-extends Node3D
-## A low-poly sheep built from primitives; wanders inside a pen.
+extends Walker
+## A low-poly sheep built from primitives; wanders inside a pen. Solid (Walker): bumps into fences and you.
 
 var pen_center := Vector3.ZERO
 var pen_radius := 6.0
@@ -14,8 +14,17 @@ func _ready() -> void:
 	add_to_group("interactable")
 	if is_lost_candidate:
 		add_to_group("lost_sheep")
+	body_radius = 0.42
+	body_height = 0.8
+	walk_speed = 0.9
+	turn_speed = 4.0
+	if _col:
+		(_col.shape as CapsuleShape3D).radius = body_radius
+		(_col.shape as CapsuleShape3D).height = body_height
+		_col.position.y = body_height * 0.5 + 0.02
 	_body = Node3D.new()
 	add_child(_body)
+	skin = _body
 	var wool := StandardMaterial3D.new()
 	wool.albedo_color = Color(0.95, 0.93, 0.88)
 	wool.roughness = 1.0
@@ -63,7 +72,7 @@ func wander_off() -> void:
 	_lost = true
 	_following = false
 	var spots := [Vector3(48.0, 0, -44.0), Vector3(40.0, 0, 2.0), Vector3(52.0, 0, -20.0)]
-	position = spots[randi() % spots.size()]
+	teleport(spots[randi() % spots.size()])
 	_target = position
 
 
@@ -89,16 +98,18 @@ func _process(delta: float) -> void:
 	if _following:
 		var pl := get_tree().get_first_node_in_group("player") as Node3D
 		if pl:
-			var tp := pl.global_position - position
+			var tp := pl.global_position - global_position
 			tp.y = 0.0
-			if tp.length() > 2.2:
-				position += tp.normalized() * minf(3.2 * delta, tp.length() - 2.0)
-				_body.rotation.y = lerp_angle(_body.rotation.y, atan2(tp.x, tp.z), 5.0 * delta)
-				_body.position.y = absf(sin(Time.get_ticks_msec() / 110.0)) * 0.05
-			if position.distance_to(pen_center) < pen_radius + 1.5:
+			if tp.length() > 2.4:
+				walk_speed = 3.4 if tp.length() > 6.0 else 2.4
+				go_to(pl.global_position - tp.normalized() * 1.9)
+			elif is_walking():
+				stop()
+			if global_position.distance_to(pen_center) < pen_radius + 1.5:
 				_following = false
 				_lost = false
-				_target = pen_center
+				stop()
+				_wait = 1.0
 				GameState.sheep_day = Story.today_key()
 				GameState.coins += 10
 				GameState.add_ember(1)
@@ -107,15 +118,19 @@ func _process(delta: float) -> void:
 				GameState.mark_dirty()
 				GameState.say("Home. The sheep rejoins the flock as if nothing happened.  +10 coins, +1 Ember")
 		return
-	var to := _target - position
-	to.y = 0.0
-	if to.length() > 0.2:
-		position += to.normalized() * minf(0.9 * delta, to.length())
-		_body.rotation.y = lerp_angle(_body.rotation.y, atan2(to.x, to.z), 4.0 * delta)
-		_body.position.y = absf(sin(Time.get_ticks_msec() / 120.0)) * 0.04
-	else:
-		_wait -= delta
-		if _wait <= 0.0:
-			var a := randf() * TAU
-			_target = pen_center + Vector3(cos(a), 0, sin(a)) * randf() * pen_radius
-			_wait = randf_range(1.0, 4.0)
+	if is_walking():
+		return
+	_wait -= delta
+	if _wait <= 0.0:
+		var a := randf() * TAU
+		var p := pen_center + Vector3(cos(a), 0, sin(a)) * randf() * pen_radius
+		if _lost:
+			p = global_position + Vector3(cos(a), 0, sin(a)) * randf_range(1.0, 3.0)
+		if _nav == null or not _nav.built or _nav.line_clear(global_position, p):
+			walk_speed = 0.9
+			go_to(p)
+		_wait = randf_range(1.0, 5.0)
+
+
+func _on_walk(_delta: float, speed: float) -> void:
+	_body.position.y = absf(sin(Time.get_ticks_msec() / 120.0)) * 0.04 * clampf(speed, 0.0, 1.0)

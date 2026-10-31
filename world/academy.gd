@@ -43,7 +43,7 @@ func _ready() -> void:
 		pn.set_script(load("res://world/painting.gd"))
 		pn.setup(pt[0], pt[1], pt[2])
 		add_child(pn)
-	var lcat := Node3D.new()
+	var lcat := CharacterBody3D.new()
 	lcat.position = Vector3(3.0, 0, -22.5)
 	lcat.set_script(load("res://world/cat.gd"))
 	lcat.tint = Color(0.5, 0.45, 0.55)

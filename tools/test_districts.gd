@@ -11,7 +11,7 @@ func _ready() -> void:
 	GameState.forced_hour = 10.0
 	p.global_position = Vector3(30, 0.1, -8)
 	await get_tree().create_timer(0.5).timeout
-	print("wren target 10h: ", by["wren"]._target_pos, " walking=", by["wren"]._walking)
+	print("wren target 10h: ", by["wren"]._target_pos, " walking=", by["wren"].is_walking())
 	GameState.forced_hour = 20.0
 	p.global_position = Vector3(-34, 0.1, -5)
 	await get_tree().create_timer(0.5).timeout

@@ -113,3 +113,12 @@
 - Dock rebuilt as a walkable pier with rails; lake colliders carved around it (fishing spot and Hatch's boat at the pier end).
 - Hills no longer land on places (Hollow Wood bed was walled in). Reachability test: flood-fill from spawn reaches every land interactable (only Heron Isle needs the boat).
 - Verified in a real browser build (Playwright): house, church, tree, river, lake all block; movement works.
+
+## build 20261031-0106 — movement & life pass
+- Player: smooth acceleration/braking (frame-rate independent), lean into turns, floor snap + constant slope speed, coyote time, jump buffer, variable jump height, shallow-angle wall sliding. Camera: eased look-ahead, softer vertical follow, wider FOV when running.
+- Tap-to-walk is routed through the NavGrid (walks around houses instead of into them).
+- NavGrid (`world/nav_grid.gd`): walkability lattice built from the scene's colliders a few frames after load (2.5 m in the valley, 1.5 m indoors), edges tested with shin/chest rays + surface continuity, A* with road preference (`Village.nav_cost`), string pulling, edges learned bad at run time.
+- Walker (`world/walker.gd`): base for villagers, cats and sheep — real CharacterBody3D capsules (layer 2) so they block and are blocked, smooth speed/turning, separation from each other, stuck recovery; hidden walkers stop colliding and stop simulating.
+- Villagers walk their schedules along roads and over the bridge, stroll a few steps near their post and come back, face you when you approach, and stand on the nearest clear spot when a hand-placed post was inside a building box. Pets/sheep follow with rate-limited re-planning.
+- Fixed: hex-pack fences were rotated 90° and offset one tile (drawn as combs, colliders off the picture). `Village._fence_piece` places them on the line; gates have the door leaf hidden (open gateway); sheep pen is a closed ring with one opening. Trial Field is now reachable through its gate.
+- Tests: `tools/test_nav.gd` (routes, villagers arrive, nothing inside colliders), `tools/test_navacad.gd` (academy rooms), `tools/test_move.gd` (feel + tap routing + solid villagers); full suite re-run clean.

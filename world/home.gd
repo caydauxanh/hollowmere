@@ -157,7 +157,7 @@ func _build_furniture() -> void:
 	shelf.set_script(load("res://world/trophy_shelf.gd"))
 	add_child(shelf)
 	# The cat, if you have petted enough cats (friend of cats): just always here, asleep by the hearth
-	var cat := Node3D.new()
+	var cat := CharacterBody3D.new()
 	cat.position = Vector3(-4.0, 0, -5.0)
 	cat.set_script(load("res://world/cat.gd"))
 	cat.tint = Color(0.9, 0.6, 0.3)

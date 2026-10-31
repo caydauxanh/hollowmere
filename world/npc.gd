@@ -1,6 +1,8 @@
 class_name Villager
-extends Node3D
+extends Walker
 ## A villager: KayKit character with idle animation, name tag, daily request and dialogue.
+## Walks its daily schedule along real routes (NavGrid), strolls a little around its post,
+## turns to face you when you come close, and never passes through walls or people.
 
 const SCALE := 0.62
 
@@ -13,12 +15,17 @@ var _bubble: Label3D
 var _sleep := false
 var _target_pos := Vector3.INF
 var _target_face := 0.0
-var _walking := false
 var _lesson := ""
 var _q := 0
 var _correct := 0
 var _gesture_t := 5.0
 var _hiding := false
+var _stroll_t := 6.0
+var _strolling := false
+var _retry_t := 3.0
+var _post_eff := Vector3.INF   # where we actually stand: the post, or the nearest clear spot beside it
+var _post_ok := false
+var _away_from_post := false
 
 
 func setup(id: String) -> void:
@@ -34,6 +41,8 @@ func _ready() -> void:
 	_skin.scale = Vector3.ONE * float(data.get("scale", SCALE))
 	_skin.rotation.y = deg_to_rad(data["face"])
 	add_child(_skin)
+	skin = _skin
+	walk_speed = 2.0
 	for mi in _skin.find_children("*", "MeshInstance3D", true, false):
 		for i in mi.get_surface_override_material_count():
 			var base: Material = mi.mesh.surface_get_material(i) if mi.mesh else null
@@ -52,8 +61,10 @@ func _ready() -> void:
 			mi.set_surface_override_material(i, m)
 	_anim = _skin.get_node("AnimationPlayer")
 	_anim.get_animation("Idle").loop_mode = Animation.LOOP_LINEAR
+	_anim.get_animation("Walking_A").loop_mode = Animation.LOOP_LINEAR
 	_anim.play("Idle")
 	_anim.seek(randf() * 1.0)
+	_stroll_t = randf_range(4.0, 14.0)
 
 	_tag = Label3D.new()
 	_tag.text = data["name"]
@@ -78,16 +89,8 @@ func _ready() -> void:
 	_bubble.outline_modulate = Color(0.3, 0.15, 0.0)
 	_bubble.position.y = 2.75
 	add_child(_bubble)
-
-	var body := StaticBody3D.new()
-	var col := CollisionShape3D.new()
-	var cap := CapsuleShape3D.new()
-	cap.radius = 0.4
-	cap.height = 1.8
-	col.shape = cap
-	col.position.y = 0.9
-	body.add_child(col)
-	add_child(body)
+	if data.get("ghost", false):
+		collision_layer = 0   # a ghost is not solid
 
 
 func _process(_delta: float) -> void:
@@ -101,7 +104,7 @@ func _process(_delta: float) -> void:
 		asleep = not GameState.is_night()
 	if asleep != _sleep:
 		_sleep = asleep
-		visible = not asleep
+		set_shown(not asleep)
 	_follow_schedule(h, _delta)
 	var near := true
 	var plr := get_tree().get_first_node_in_group("player")
@@ -133,13 +136,13 @@ func _follow_schedule(h: float, delta: float) -> void:
 				elsewhere = true
 			break
 	if my_scene != home_scene and not (my_scene == "tavern" and _in_tavern_slot(h)):
-		visible = false
+		set_shown(false)
 		return
 	if elsewhere:
-		visible = false
+		set_shown(false)
 		return
 	if not _sleep:
-		visible = true
+		set_shown(true)
 	if Story.todays_event().get("id", "") == "lantern" and h >= 19.0 and h < 21.0 and data.get("scene", "village") == "village" and npc_id != "hatch" and npc_id != "marrow":
 		var k := npc_id.hash() % 7
 		want = Vector3(2.0 + cos(k * 0.9) * 8.0, 0, 28.0 + sin(k * 0.9) * 6.0)
@@ -149,40 +152,132 @@ func _follow_schedule(h: float, delta: float) -> void:
 			want = e[2]
 			face = e[3]
 			break
+	var pl := get_tree().get_first_node_in_group("player") as Node3D
+	var pd: float = pl.global_position.distance_to(global_position) if pl else 1e9
 	if want != _target_pos:
 		_target_pos = want
 		_target_face = face
-		# Far from the player: just appear there (no one is watching).
-		var pl := get_tree().get_first_node_in_group("player")
-		if pl == null or (pl as Node3D).global_position.distance_to(global_position) > 30.0:
-			position = want
-	var to := _target_pos - position
-	to.y = 0.0
-	if to.length() > 0.3:
-		position += to.normalized() * minf(2.2 * delta, to.length())
-		_skin.rotation.y = lerp_angle(_skin.rotation.y, atan2(to.x, to.z), 8.0 * delta)
-		if not _walking:
-			_walking = true
-			_anim.get_animation("Walking_A").loop_mode = Animation.LOOP_LINEAR
-			_anim.play("Walking_A", 0.2)
-	elif _walking:
-		_walking = false
-		_skin.rotation.y = deg_to_rad(_target_face)
-		_anim.play("Idle", 0.3)
-	else:
-		# Standing: turn to face the player when they come close, otherwise face home.
-		var pl := get_tree().get_first_node_in_group("player")
-		if pl:
-			var to_p: Vector3 = (pl as Node3D).global_position - global_position
-			to_p.y = 0.0
-			var want_yaw := atan2(to_p.x, to_p.z) if to_p.length() < 4.5 else deg_to_rad(_target_face)
-			_skin.rotation.y = lerp_angle(_skin.rotation.y, want_yaw, 5.0 * delta)
+		_strolling = false
+		_post_eff = _resolve_post(want)
+		_post_ok = _nav != null and _nav.built
+		_head_for_post(pl == null or pd > 45.0 or not visible)
+		return
+	if not _post_ok and _grid() and _nav.built:
+		# The grid came up after the post was set: move to the standable spot if it differs.
+		_post_ok = true
+		var e := _resolve_post(_target_pos)
+		if e.distance_to(_post_eff) > 0.2:
+			_post_eff = e
+			_head_for_post(pl == null or pd > 45.0 or not visible)
+			return
+	if is_walking():
+		return
+	# Standing. In a conversation: hold still.
+	if GameState.ui_locked:
+		return
+	var at_post := _post_eff.distance_to(global_position) < 0.9
+	# Did not make it (no route, spot taken): appear there once nobody is looking, else try again later.
+	if not at_post and not _strolling and _post_eff.distance_to(global_position) > 5.0:
+		if pd > 45.0:
+			teleport(_post_eff)
+		else:
+			_retry_t -= delta
+			if _retry_t <= 0.0:
+				_retry_t = 8.0
+				go_to(_post_eff)
+		return
+	# Turn to face the player when they come close, otherwise face the post's direction.
+	if pl and pd < 4.5:
+		var to_p: Vector3 = pl.global_position - global_position
+		to_p.y = 0.0
+		_skin.rotation.y = lerp_angle(_skin.rotation.y, atan2(to_p.x, to_p.z), 5.0 * delta)
+		_stroll_t = maxf(_stroll_t, 3.0)
+	elif at_post and not _strolling:
+		_skin.rotation.y = lerp_angle(_skin.rotation.y, deg_to_rad(_target_face), 4.0 * delta)
+	# A little life: every so often stroll a few steps near the post, then come back.
+	_stroll_t -= delta
+	if _stroll_t <= 0.0:
+		if _strolling or not at_post:
+			_strolling = false
+			walk_speed = 1.3
+			go_to(_post_eff)
+			_stroll_t = randf_range(10.0, 24.0)
+		elif _goal == Vector3.INF and pd < 40.0 and _nav and _nav.built:
+			var a := randf() * TAU
+			var p := _post_eff + Vector3(cos(a), 0, sin(a)) * randf_range(2.0, 4.0)
+			var sy := _nav._surface_y(p)
+			if sy != NavGrid.BLOCKED and absf(sy - global_position.y) < 0.3 and _nav.line_clear(global_position, p):
+				_strolling = true
+				walk_speed = 1.1
+				go_to(p)
+			_stroll_t = randf_range(5.0, 12.0)
+		else:
+			_stroll_t = randf_range(4.0, 10.0)
+	if not _strolling:
 		_gesture_t -= delta
 		if _gesture_t <= 0.0:
 			_gesture_t = randf_range(6.0, 16.0)
 			if _anim.current_animation == "Idle" and _anim.has_animation("Interact"):
 				_anim.play("Interact", 0.3)
 				_anim.animation_finished.connect(func(_n): _anim.play("Idle", 0.3), CONNECT_ONE_SHOT)
+
+
+func _head_for_post(instant: bool) -> void:
+	if instant:
+		teleport(_post_eff)
+	else:
+		go_to(_post_eff)
+
+
+## Posts were placed by hand and some sit inside a building's collision box (a doorway, a counter).
+## A solid body cannot stand there, so pick the nearest clear spot within a couple of metres.
+func _resolve_post(p: Vector3) -> Vector3:
+	if _grid() == null or not _nav.built:
+		return p
+	if _standable(p):
+		return p
+	var best := p
+	var bd := 1e9
+	for ri: float in [0.7, 1.3, 1.9, 2.5, 3.2]:
+		for k in 12:
+			var a := k * TAU / 12.0
+			var q := p + Vector3(cos(a), 0, sin(a)) * ri
+			if _standable(q):
+				var d := q.distance_to(p)
+				if d < bd:
+					bd = d
+					best = q
+		if bd < 1e9:
+			break
+	return best
+
+
+func _standable(q: Vector3) -> bool:
+	var sy := _nav._surface_y(q)
+	if sy == NavGrid.BLOCKED or absf(sy) > 0.35:
+		return false
+	var sq := PhysicsShapeQueryParameters3D.new()
+	var sp := CylinderShape3D.new()
+	sp.radius = 0.5
+	sp.height = 1.2
+	sq.shape = sp
+	sq.collision_mask = 1
+	sq.transform = Transform3D(Basis.IDENTITY, Vector3(q.x, sy + 0.75, q.z))
+	return _nav._space.intersect_shape(sq, 1).is_empty()
+
+
+func _on_moving_changed(moving: bool) -> void:
+	if moving:
+		_anim.play("Walking_A", 0.25)
+	else:
+		_anim.speed_scale = 1.0
+		_anim.play("Idle", 0.35)
+		walk_speed = 2.0
+
+
+func _on_walk(_delta: float, speed: float) -> void:
+	if _moving:
+		_anim.speed_scale = clampf(speed / 2.0, 0.55, 1.25)
 
 
 func _in_tavern_slot(h: float) -> bool:
@@ -668,8 +763,9 @@ func go_hide(_a) -> void:
 	_hiding = true
 	var spots := [Vector3(-20.0, 0, 14.0), Vector3(24.0, 0, -9.0), Vector3(-9.0, 0, -17.0), Vector3(16.0, 0, 20.0), Vector3(-36.0, 0, 12.0), Vector3(30.0, 0, 6.0)]
 	var p: Vector3 = spots[randi() % spots.size()]
-	position = p
 	_target_pos = p
+	_post_eff = _resolve_post(p)
+	teleport(_post_eff)
 	GameState.say("Ten! Pip is somewhere in the village. (Hint: look behind houses and trees.)")
 
 

@@ -147,7 +147,7 @@ func _build_furniture() -> void:
 	board.position = Vector3(-6.3, 0, -8.5)
 	board.set_script(load("res://world/tavern_board.gd"))
 	add_child(board)
-	var cat := Node3D.new()
+	var cat := CharacterBody3D.new()
 	cat.position = Vector3(5.0, 0, -1.0)
 	cat.set_script(load("res://world/cat.gd"))
 	cat.tint = Color(0.3, 0.28, 0.32)

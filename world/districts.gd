@@ -35,14 +35,12 @@ func _house(model: String, pos: Vector3, face_to: Vector3, s: float = B) -> Node
 	return h
 
 
+## A run of fence from `a` to `b`, pieces end to end; piece `gate_at` is an open gateway.
 func _fence_line(a: Vector3, b: Vector3, gate_at: int = -1) -> void:
-	var n := int(a.distance_to(b) / 2.4)
+	var n := int(round(a.distance_to(b) / 2.5))
 	var dir := (b - a) / float(n)
 	for i in n:
-		var model := "buildings/neutral/fence_wood_straight_gate.gltf" if i == gate_at else "buildings/neutral/fence_wood_straight.gltf"
-		var f: Node3D = v._place(HEX + model, a + dir * (i + 0.5), B * 0.5, atan2(dir.x, dir.z) + PI / 2.0)
-		if i != gate_at:
-			v._collider(f, Vector3(0, 0.3, 0), Vector3(1.0, 0.6, 0.2))
+		v._fence_piece(a + dir * (i + 0.5), dir.normalized(), i == gate_at)
 
 
 func _lamp(pos: Vector3) -> void:

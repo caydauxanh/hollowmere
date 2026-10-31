@@ -1,5 +1,6 @@
-extends Node3D
+extends Walker
 ## A village cat built from primitives: naps, stretches, wanders a little, likes being petted.
+## Walks with real collision (Walker), so it goes around furniture and legs instead of through them.
 
 var home := Vector3.ZERO
 var tint := Color(0.3, 0.28, 0.3)
@@ -13,8 +14,17 @@ var companion := false   # the orange village cat: follows you once befriended
 func _ready() -> void:
 	add_to_group("interactable")
 	home = position
+	body_radius = 0.2
+	body_height = 0.45
+	walk_speed = 1.1
+	turn_speed = 6.0
+	if _col:
+		(_col.shape as CapsuleShape3D).radius = body_radius
+		(_col.shape as CapsuleShape3D).height = body_height
+		_col.position.y = body_height * 0.5 + 0.02
 	_body = Node3D.new()
 	add_child(_body)
+	skin = _body
 	var fur := StandardMaterial3D.new()
 	fur.albedo_color = tint
 	fur.roughness = 1.0
@@ -91,22 +101,27 @@ func _process(delta: float) -> void:
 	if companion and GameState.cat_name != "":
 		var pl := get_tree().get_first_node_in_group("player") as Node3D
 		if pl:
-			var tp := pl.global_position - position
+			var tp := pl.global_position - global_position
 			tp.y = 0.0
-			if tp.length() > 3.0:
-				position += tp.normalized() * minf((5.0 if tp.length() > 8.0 else 2.4) * delta, tp.length() - 2.5)
-				_body.rotation.y = lerp_angle(_body.rotation.y, atan2(tp.x, tp.z), 6.0 * delta)
 			if tp.length() > 40.0:
-				position = pl.global_position + Vector3(1.5, 0, 1.5)
+				teleport(pl.global_position + Vector3(1.5, 0, 1.5))
+			elif tp.length() > 3.0:
+				walk_speed = 4.6 if tp.length() > 8.0 else 2.2
+				go_to(pl.global_position - tp.normalized() * 2.2)
+			elif tp.length() < 2.2 and is_walking():
+				stop()
 		return
-	var to := _target - position
-	to.y = 0.0
-	if to.length() > 0.15:
-		position += to.normalized() * minf(1.1 * delta, to.length())
-		_body.rotation.y = lerp_angle(_body.rotation.y, atan2(to.x, to.z), 5.0 * delta)
-	else:
-		_wait -= delta
-		if _wait <= 0.0:
-			var a := randf() * TAU
-			_target = home + Vector3(cos(a), 0, sin(a)) * randf() * 3.5
-			_wait = randf_range(3.0, 10.0)
+	if is_walking():
+		return
+	_wait -= delta
+	if _wait <= 0.0:
+		var a := randf() * TAU
+		var p := home + Vector3(cos(a), 0, sin(a)) * randf() * 3.5
+		if _nav == null or not _nav.built or _nav.line_clear(global_position, p):
+			walk_speed = 1.1
+			go_to(p)
+		_wait = randf_range(3.0, 10.0)
+
+
+func _on_walk(_delta: float, speed: float) -> void:
+	_body.position.y = absf(sin(Time.get_ticks_msec() / 110.0)) * 0.03 * clampf(speed, 0.0, 1.0)
