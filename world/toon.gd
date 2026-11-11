@@ -20,9 +20,11 @@ void vertex() {
 void fragment() {
 	// Walls and roofs between the camera and the player open a dithered window (floors never do).
 	float centre = length((SCREEN_UV - vec2(0.5, 0.48)) * vec2(1.7, 1.0));
-	float occl = clamp((focus_dist - 1.2 - vdist) / 1.5, 0.0, 1.0) * clamp((0.36 - centre) / 0.14, 0.0, 1.0) * (1.0 - step(0.75, up_facing) * step(world_y, 0.45));
-	float near = clamp((vdist - 0.6) / 1.2, 0.0, 1.0);
-	float keep = min(near, 1.0 - occl * 0.93);
+	float occl = clamp((focus_dist - 1.2 - vdist) / 1.5, 0.0, 1.0) * clamp((0.30 - centre) / 0.08, 0.0, 1.0) * (1.0 - step(0.75, up_facing) * step(world_y, 0.45));
+	// anything crowding the lens (closer than about half-way to the player) clears out, floors excepted
+	float floorish = step(0.75, up_facing) * step(world_y, 0.45);
+	float near = mix(clamp((vdist - focus_dist * 0.40) / (focus_dist * 0.05 + 0.01), 0.0, 1.0), 1.0, floorish);
+	float keep = min(near, 1.0 - occl);
 	if (keep < 0.999) {
 		float dith = fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715))));
 		if (keep < dith) { discard; }

@@ -34,6 +34,8 @@ var _foot: AudioStreamPlayer3D
 var _land: AudioStreamPlayer3D
 var _dust: GPUParticles3D
 var glow: OmniLight3D
+## Warm hand lantern, lit by the scene after dark (casts shadows on high quality).
+var lantern: OmniLight3D
 var flying := false
 var _broom: Node3D
 var _trail: GPUParticles3D
@@ -87,6 +89,16 @@ func _ready() -> void:
 	glow.omni_range = 3.5
 	glow.position = Vector3(0, 1.6, 0)
 	add_child(glow)
+	lantern = OmniLight3D.new()
+	lantern.light_color = Color(1.0, 0.7, 0.4)
+	lantern.light_energy = 0.0
+	lantern.omni_range = 14.0
+	lantern.omni_attenuation = 1.1
+	lantern.shadow_enabled = false
+	lantern.shadow_bias = 0.08
+	lantern.position = Vector3(0.3, 2.7, 0.2)
+	lantern.visible = false
+	add_child(lantern)
 	_play("Idle")
 
 	var col := CollisionShape3D.new()

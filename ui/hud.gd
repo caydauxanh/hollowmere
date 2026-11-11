@@ -349,7 +349,7 @@ func _process(delta: float) -> void:
 			_toast_time = 3.0 + minf(nxt.length() / 40.0, 3.0)
 			_toast.modulate.a = 1.0
 	_web_bridge(delta)
-	_dbg.text = "build 20261111-1620  ·  Hollowmere"
+	_dbg.text = "build 20261111-2341  ·  Hollowmere"
 	_update_compass()
 
 
@@ -432,7 +432,7 @@ func _show_toast(text: String) -> void:
 
 func _label(size: int, color: Color) -> Label:
 	var l := Label.new()
-	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_font_size_override("font_size", size + 2)
 	l.add_theme_color_override("font_color", color)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
@@ -452,14 +452,14 @@ func _circle(c: Color, size: float) -> Panel:
 
 func _box(c: Color) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
-	s.bg_color = c
-	s.set_corner_radius_all(14)
+	s.bg_color = Color(c.r * 0.45, c.g * 0.5, c.b * 0.4, minf(c.a + 0.1, 0.96))
+	s.set_corner_radius_all(3)
 	s.content_margin_left = 12
 	s.content_margin_right = 12
 	s.content_margin_top = 6
 	s.content_margin_bottom = 6
-	s.border_color = Color(0.8, 0.65, 1.0, 0.5)
-	s.set_border_width_all(2)
+	s.border_color = Color(0.55, 0.45, 0.28, 0.85)
+	s.set_border_width_all(1)
 	return s
 
 
@@ -620,10 +620,10 @@ func _build_journal() -> void:
 	_journal.offset_top = -250
 	_journal.offset_bottom = 250
 	var photo_btn := Button.new()
-	photo_btn.text = "📷"
+	photo_btn.text = "Photo"
 	photo_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	photo_btn.position = Vector2(-662, 12)
-	photo_btn.custom_minimum_size = Vector2(36, 36)
+	photo_btn.position = Vector2(-680, 12)
+	photo_btn.custom_minimum_size = Vector2(54, 36)
 	photo_btn.focus_mode = Control.FOCUS_NONE
 	photo_btn.add_theme_font_size_override("font_size", 14)
 	photo_btn.pressed.connect(_toggle_photo)
@@ -971,23 +971,7 @@ var _title_time := 0.0
 var _title_district := ""
 
 func _build_vignette() -> void:
-	var v := ColorRect.new()
-	v.set_anchors_preset(Control.PRESET_FULL_RECT)
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sh := Shader.new()
-	sh.code = """
-shader_type canvas_item;
-void fragment() {
-	vec2 d = (UV - vec2(0.5)) * vec2(1.25, 1.0);
-	float v = smoothstep(0.45, 1.05, length(d));
-	COLOR = vec4(0.05, 0.02, 0.1, v * 0.55);
-}
-"""
-	var m := ShaderMaterial.new()
-	m.shader = sh
-	v.material = m
-	add_child(v)
-	move_child(v, 0)
+	pass   # the picture pass (world/post.gd) owns vignette and grain now
 
 
 func _build_title_card() -> void:
@@ -1274,7 +1258,7 @@ func _toggle_photo() -> void:
 		_photo_layer = CanvasLayer.new()
 		_photo_layer.layer = 30
 		var b := Button.new()
-		b.text = "📷  exit photo mode (P)"
+		b.text = "Exit photo mode (P)"
 		b.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 		b.position = Vector2(-230, -50)
 		b.custom_minimum_size = Vector2(210, 36)

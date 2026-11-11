@@ -33,9 +33,11 @@ var _shot_frames := 0
 func apply_quality() -> void:
 	var low := GameState.quality == "low"
 	sun.directional_shadow_max_distance = 26.0 if low else 40.0
-	var g := get_node_or_null("Grass")
-	if g:
-		g.visible = not low
+	if grass:
+		grass.multimesh.visible_instance_count = 5500 if low else 9000
+	env.glow_enabled = not low
+	if player and player.get("lantern") != null:
+		player.lantern.shadow_enabled = not low
 	var fl := get_node_or_null("Flowers")
 	if fl:
 		fl.visible = true
@@ -204,18 +206,21 @@ func _build_environment() -> void:
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 1.0
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.2
-	env.adjustment_contrast = 1.05
-	env.glow_enabled = not OS.has_feature("web")   # glow is costly in the web renderer
-	env.glow_intensity = 0.6
-	env.glow_bloom = 0.0
-	env.glow_hdr_threshold = 1.0
+	env.adjustment_saturation = 1.08
+	env.adjustment_contrast = 1.04
+	env.glow_enabled = true    # switched off again by apply_quality() on "low"
+	env.glow_intensity = 0.7
+	env.glow_bloom = 0.08
+	env.glow_hdr_threshold = 0.95
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
 	env.fog_enabled = true
 	env.fog_density = 0.0025
 	env.fog_sky_affect = 0.25
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
+	post = PostFX.new()
+	add_child(post)
 
 	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = true
@@ -241,7 +246,8 @@ func _update_daylight() -> void:
 	sun.light_energy = day * 0.75
 	sun.light_color = Color(1.0, 0.92, 0.8).lerp(Color(1.0, 0.5, 0.25), dusk)
 	sun.visible = day > 0.02
-	moon.light_energy = (1.0 - day) * 0.3
+	moon.light_energy = (1.0 - day) * 0.42
+	moon.light_color = Color(0.56, 0.7, 0.95)
 	moon.visible = day < 0.98
 
 	var top := Color(0.06, 0.06, 0.2).lerp(Color(0.3, 0.5, 0.9), day).lerp(Color(0.3, 0.2, 0.55), dusk * 0.7)
@@ -251,16 +257,27 @@ func _update_daylight() -> void:
 	sky_mat.ground_horizon_color = hor
 	sky_mat.ground_bottom_color = top.darkened(0.5)
 	env.fog_light_color = hor.lerp(Color(0.45, 0.35, 0.6), 0.3)
-	env.ambient_light_color = Color(0.25, 0.22, 0.45).lerp(Color(0.5, 0.55, 0.7), day)
-	env.ambient_light_energy = lerpf(1.1, 0.45, day)
-	env.tonemap_exposure = lerpf(1.0, 0.85, day)
+	env.ambient_light_color = Color(0.13, 0.19, 0.4).lerp(Color(0.5, 0.55, 0.7), day)
+	env.ambient_light_energy = lerpf(0.62, 0.45, day)
+	env.tonemap_exposure = lerpf(1.05, 0.85, day)
+	env.fog_density = lerpf(0.0075, 0.0025, day) * (1.0 + dusk * 0.6)
 	if env.glow_enabled:
-		env.glow_intensity = lerpf(0.9, 0.35, day)
+		env.glow_intensity = lerpf(1.0, 0.4, day)
+	if post:
+		post.set_night(1.0 - day)
+	if player and player.get("lantern") != null:
+		var fl := 1.0 + sin(Time.get_ticks_msec() / 1000.0 * 9.0) * 0.05 + sin(Time.get_ticks_msec() / 1000.0 * 23.0) * 0.03
+		player.lantern.light_energy = (1.0 - day) * 4.2 * fl
+		player.lantern.visible = day < 0.9
+	if grass:
+		var cam3 := get_viewport().get_camera_3d()
+		var cpos: Vector3 = player.global_position if cam3 == null else player.global_position.lerp(cam3.global_position, 0.25)
+		grass.follow(Vector3(cpos.x, 0, cpos.z), player.global_position)
 
 	var night := 1.0 - day
 	for l in night_lights:
 		var flick := 1.0 + sin(Time.get_ticks_msec() / 1000.0 * 7.0 + l.get_meta("seed", 0.0)) * 0.08
-		l.light_energy = lerpf(0.05, l.get_meta("base_energy", 1.5), night) * flick * float(l.get_meta("warm", 1.0))
+		l.light_energy = lerpf(0.05, l.get_meta("base_energy", 1.5) * 1.5, night) * flick * float(l.get_meta("warm", 1.0))
 	fireflies.emitting = night > 0.4
 
 
@@ -275,21 +292,44 @@ func _build_ground() -> void:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(400, 400)
 	mesh.mesh = plane
-	ground_mat = _mat(Color(0.34, 0.52, 0.32), 0.95)
-	# Soft procedural mottling so the meadow is not one flat green
+	# Meadow ground: mottled turf, dry patches, muddy hollows and standing water that catches the light.
 	var noise := FastNoiseLite.new()
 	noise.seed = 3
-	noise.frequency = 0.02
-	noise.fractal_octaves = 3
+	noise.frequency = 0.012
+	noise.fractal_octaves = 4
 	var nt := NoiseTexture2D.new()
 	nt.noise = noise
 	nt.width = 256
 	nt.height = 256
-	nt.color_ramp = Gradient.new()
-	nt.color_ramp.set_color(0, Color(0.78, 0.9, 0.7))
-	nt.color_ramp.set_color(1, Color(1.0, 1.0, 1.0))
-	ground_mat.albedo_texture = nt
-	ground_mat.uv1_scale = Vector3(40, 40, 40)
+	nt.seamless = true
+	var gsh := Shader.new()
+	gsh.code = """
+shader_type spatial;
+uniform vec3 tint : source_color = vec3(0.34, 0.52, 0.32);
+uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
+uniform float wet_amount = 0.4;
+varying vec3 wp;
+void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	float n1 = texture(noise_tex, wp.xz * 0.013).r;
+	float n2 = texture(noise_tex, wp.xz * 0.051 + vec2(3.7, 1.9)).r;
+	float n3 = texture(noise_tex, wp.xz * 0.23 + vec2(7.1, 4.3)).r;
+	vec3 g = tint * mix(0.55, 0.92, n1) * mix(0.9, 1.06, n3);
+	g = mix(g, g * vec3(1.18, 1.06, 0.72), smoothstep(0.5, 0.72, n2));
+	float hollow = smoothstep(0.56, 0.7, n1 * 0.55 + n2 * 0.45);
+	float wet = hollow * wet_amount;
+	float puddle = smoothstep(0.34, 0.42, wet + (n3 - 0.5) * 0.1);
+	vec3 col = mix(g, vec3(0.15, 0.12, 0.09), clamp(wet * 1.6, 0.0, 0.85));
+	col = mix(col, vec3(0.03, 0.045, 0.06), puddle * 0.9);
+	ALBEDO = col;
+	ROUGHNESS = mix(0.97, 0.08, puddle);
+	SPECULAR = mix(0.15, 0.9, puddle);
+	METALLIC = puddle * 0.25;
+}
+"""
+	ground_mat = ShaderMaterial.new()
+	ground_mat.shader = gsh
+	ground_mat.set_shader_parameter("noise_tex", nt)
 	mesh.material_override = ground_mat
 	body.add_child(mesh)
 	add_child(body)
@@ -613,7 +653,8 @@ func _build_people() -> void:
 
 # ---------------------------------------------------------------- chapter 3, seasons, weather
 
-var ground_mat: StandardMaterial3D
+var ground_mat: ShaderMaterial
+var post: PostFX
 var weather_particles: GPUParticles3D
 
 func _build_chapter3() -> void:
@@ -649,7 +690,10 @@ func _build_season_and_weather() -> void:
 	var weather := Story.weather()
 	# Ground colour follows the season
 	var ground_colors := {"winter": Color(0.82, 0.85, 0.9), "spring": Color(0.42, 0.62, 0.36), "summer": Color(0.34, 0.56, 0.3), "autumn": Color(0.4, 0.5, 0.3)}
-	ground_mat.albedo_color = ground_colors[season]
+	ground_mat.set_shader_parameter("tint", ground_colors[season])
+	if grass:
+		grass.set_tint({"winter": Color(1.5, 1.6, 1.9), "spring": Color(1.0, 1.08, 1.0), "summer": Color(1, 1, 1), "autumn": Color(1.45, 1.0, 0.6)}.get(season, Color(1, 1, 1)))
+	ground_mat.set_shader_parameter("wet_amount", 0.75 if weather in ["rain", "storm", "drizzle"] else 0.42)
 	# Season touches: tinted tree leaves in autumn, frost on grass in winter, blossom in spring
 	var leaf_tint: Color = {"winter": Color(0.8, 0.85, 0.9), "spring": Color(1.0, 1.0, 1.0), "summer": Color(1.0, 1.0, 1.0), "autumn": Color(1.25, 1.0, 0.7)}[season]
 	if season != "summer" and season != "spring":
@@ -795,6 +839,8 @@ func nav_cost(p: Vector3) -> float:
 	return 1.8
 
 
+const RIVER_PTS := [Vector3(38, 0, 26), Vector3(24, 0, 38), Vector3(6, 0, 46), Vector3(-14, 0, 46), Vector3(-30, 0, 38), Vector3(-50, 0, 24), Vector3(-64, 0, 10)]
+
 func _on_road(p: Vector3, width: float = 7.0) -> bool:
 	for rd in ROADS:
 		var a: Vector3 = rd[0]
@@ -893,7 +939,7 @@ func _build_overworld() -> void:
 	add_child(dl)
 	_signpost(Vector3(36, 0, 9), "Lake Mirren")
 	# --- River Wend: from the lake, winding south-west, with a stone bridge on the Fernmoor road
-	var pts := [Vector3(38, 0, 26), Vector3(24, 0, 38), Vector3(6, 0, 46), Vector3(-14, 0, 46), Vector3(-30, 0, 38), Vector3(-50, 0, 24), Vector3(-64, 0, 10)]
+	var pts := RIVER_PTS
 	for i in pts.size() - 1:
 		_river_segment(pts[i], pts[i + 1])
 	var bridge := _place(HEX + "buildings/neutral/building_bridge_A.gltf", Vector3(-40, 0.1, 31), B * 1.2, atan2(-48.0, 38.0))
@@ -1341,41 +1387,53 @@ var _flocks: Array[Node3D] = []
 var _stars: MultiMeshInstance3D
 var _wisps: Array[Node3D] = []
 
+var grass: Grass
+
+func _seg_dist(p: Vector2, a: Vector3, b: Vector3) -> float:
+	var a2 := Vector2(a.x, a.z)
+	var ab := Vector2(b.x, b.z) - a2
+	var t := clampf((p - a2).dot(ab) / maxf(ab.length_squared(), 0.001), 0.0, 1.0)
+	return (a2 + ab * t).distance_to(p)
+
+
+## Top-down mask (1 texel = 1.33 m over +-128 m): white where grass may grow.
+func _grass_mask() -> ImageTexture:
+	var n := 192
+	var img := Image.create(n, n, false, Image.FORMAT_L8)
+	var segs := []   # [a, b, half-width]
+	for rd in ROADS:
+		segs.append([rd[0], rd[1], 2.0])
+	for t in [Vector3(-13, 0, -12), Vector3(13, 0, -10), Vector3(16, 0, 3), Vector3(-16, 0, 7), Vector3(3, 0, -18), Vector3(-9, 0, 16), Vector3(9, 0, 12), Vector3(-4.5, 0, -7)]:
+		segs.append([Vector3.ZERO, t, 1.6])
+	segs.append([Vector3(0, 0, -12), Vector3(6.4, 0, -32), 1.9])
+	for i in RIVER_PTS.size() - 1:
+		segs.append([RIVER_PTS[i], RIVER_PTS[i + 1], 5.0])
+	segs.append([Vector3(36, 0, 12), Vector3(48, 0, 12), 2.2])   # dock
+	for j in n:
+		for i in n:
+			var p := Vector2((float(i) + 0.5) / n * 256.0 - 128.0, (float(j) + 0.5) / n * 256.0 - 128.0)
+			var ok := true
+			if p.length() < 14.5 or p.length() > 112.0:
+				ok = false
+			elif Vector2((p.x - 58.0) / 25.5, (p.y - 14.0) / 20.5).length() < 1.0:
+				ok = false   # Lake Mirren
+			elif p.distance_to(Vector2(13, 33)) < 7.5:
+				ok = false   # lily pond
+			elif absf(p.x - 4.0) < 15.0 and p.y < -24.0 and p.y > -45.0:
+				ok = false   # Academy forecourt
+			else:
+				for sg in segs:
+					if _seg_dist(p, sg[0], sg[1]) < sg[2]:
+						ok = false
+						break
+			img.set_pixel(i, j, Color(1, 1, 1) if ok else Color(0, 0, 0))
+	return ImageTexture.create_from_image(img)
+
+
 func _build_grass() -> void:
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	var blade := PrismMesh.new()
-	blade.size = Vector3(0.22, 0.45, 0.06)
-	var bm := StandardMaterial3D.new()
-	bm.vertex_color_use_as_albedo = true
-	bm.roughness = 1.0
-	bm.cull_mode = BaseMaterial3D.CULL_DISABLED
-	blade.material = bm
-	mm.mesh = blade
-	var n := 2600
-	mm.instance_count = n
-	var g := RandomNumberGenerator.new()
-	g.seed = 11
-	var placed := 0
-	var tries := 0
-	while placed < n and tries < n * 4:
-		tries += 1
-		var a := g.randf() * TAU
-		var r := sqrt(g.randf()) * 95.0
-		var pos := Vector3(cos(a) * r, 0.0, sin(a) * r)
-		if _on_road(pos, 5.0) or pos.length() < 13.5 or pos.distance_to(Vector3(58, 0, 14)) < 26.0 or pos.distance_to(Vector3(13, 0, 33)) < 7.0 or (absf(pos.x - 4.0) < 14.0 and pos.z < -24.0 and pos.z > -44.0):
-			continue
-		var t := Transform3D(Basis.from_euler(Vector3(g.randf_range(-0.2, 0.2), g.randf() * TAU, 0)).scaled(Vector3.ONE * g.randf_range(0.7, 1.5)), pos + Vector3(0, 0.2, 0))
-		mm.set_instance_transform(placed, t)
-		mm.set_instance_color(placed, Color(0.3, 0.55, 0.3).lerp(Color(0.55, 0.75, 0.35), g.randf()))
-		placed += 1
-	mm.visible_instance_count = placed
-	var mmi := MultiMeshInstance3D.new()
-	mmi.multimesh = mm
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mmi.name = "Grass"
-	add_child(mmi)
+	grass = Grass.new()
+	grass.setup(9000, _grass_mask(), Color(1, 1, 1))
+	add_child(grass)
 
 
 func _build_night_sky() -> void:

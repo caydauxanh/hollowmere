@@ -24,11 +24,11 @@ void vertex() {
 }
 void fragment() {
 	// Leaves right in front of the camera dissolve (screen-door) so the view never goes dark inside a canopy.
-	float fade = clamp((vdist - 1.2) / 3.0, 0.0, 1.0);
+	float fade = clamp((vdist - focus_dist * 0.40) / (focus_dist * 0.05 + 0.01), 0.0, 1.0);
 	// ...and leaves between the camera and the player (near the screen centre) go see-through.
 	float centre = length((SCREEN_UV - vec2(0.5)) * vec2(1.6, 1.0));
-	float occl = clamp((focus_dist - 0.8 - vdist) / 1.5, 0.0, 1.0) * clamp((0.5 - centre) / 0.2, 0.0, 1.0);
-	fade = min(fade, 1.0 - occl * 0.95);
+	float occl = clamp((focus_dist - 0.8 - vdist) / 1.5, 0.0, 1.0) * clamp((0.30 - centre) / 0.08, 0.0, 1.0);
+	fade = min(fade, 1.0 - occl);
 	float dith = fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715))));
 	if (fade < dith) { discard; }
 	ALBEDO = mix(albedo.rgb, albedo_top.rgb, vh);

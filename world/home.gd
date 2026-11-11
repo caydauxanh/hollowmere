@@ -13,6 +13,9 @@ var _shot_frames := 0
 
 func _ready() -> void:
 	Toon.apply.call_deferred(self)
+	var pfx := PostFX.new()
+	add_child(pfx)
+	pfx.set_night.call_deferred(0.55)
 	_build_environment()
 	_build_room(Vector3(0, 0, -4), 4, 3)
 	_build_furniture()

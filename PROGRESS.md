@@ -129,3 +129,12 @@
 - See-through occluders: the cel shader (now also indoors: academy, home, tavern) dithers away walls/roofs/props between the camera and the player and anything right against the lens; floors never fade.
 - Touch stick is analog: gentle push strolls, full push runs (deadzone 0.15). Debug line reduced to the build id.
 - Tests: `tools/test_intro.gd` (intro flow restores state, compass targets per chapter, stick speeds); full suite re-run clean.
+
+## build 20261111 (night) — "lantern-light" picture pass (reference: loktar00/lanternfall)
+- `world/post.gd` PostFX: one full-screen pass under the HUD — split-tone grade (cool shadows / warm lights), filmic S-curve, vignette, film grain; stronger at night. Also on the indoor scenes.
+- Night relit: darker, bluer ambient and moon; village lanterns 1.5x; the player carries a warm hand lantern after dark (flicker; casts shadows on high quality); glow/bloom on high quality (now also on web); thicker fog at night and dusk.
+- `world/grass.gd`: dense tufted meadow grass (9000 tufts high / 3800 low) in one tile that wraps around the camera; sways, bends away from the player, lit by sun and lanterns; masked off roads, paths, paving, river, lake and pond by a top-down texture built from the same geometry.
+- Ground shader: mottled turf, dry patches, muddy hollows and standing water with a real specular reflection (wetter on rainy days).
+- UI: EB Garamond (SIL OFL) as the house typeface, dark plates with a thin brass edge for panels and buttons.
+- See-through: full clear inside the centre window (no speckle) and anything crowding the lens clears out; academy relit candle-warm.
+- `tools/test_quality.gd`: low/high toggles (grass count, glow, lantern shadow) and the night lantern.

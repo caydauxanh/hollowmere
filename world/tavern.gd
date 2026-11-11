@@ -15,6 +15,9 @@ var _candles: Array[Node3D] = []
 
 func _ready() -> void:
 	Toon.apply.call_deferred(self)
+	var pfx := PostFX.new()
+	add_child(pfx)
+	pfx.set_night.call_deferred(0.55)
 	_build_environment()
 	_build_room(Vector3(0, 0, -5), 4, 4)
 	_build_furniture()

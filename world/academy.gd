@@ -19,6 +19,9 @@ var _shot_frames := 0
 
 func _ready() -> void:
 	Toon.apply.call_deferred(self)
+	var pfx := PostFX.new()
+	add_child(pfx)
+	pfx.set_night.call_deferred(0.55)
 	_build_environment()
 	_build_room(Vector3(0, 0, -6), 5, 5, "hall")        # great hall, 18 × 18
 	_build_room(Vector3(T * 4, 0, -4), 3, 3, "flame")   # east classroom
@@ -99,18 +102,23 @@ func _build_environment() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.03, 0.025, 0.06)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.42, 0.38, 0.58)
-	env.ambient_light_energy = 1.1
+	env.ambient_light_color = Color(0.3, 0.3, 0.52)
+	env.ambient_light_energy = 0.62
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.15
+	env.adjustment_saturation = 1.08
+	env.glow_enabled = GameState.quality != "low"
+	env.glow_intensity = 0.8
+	env.glow_bloom = 0.08
+	env.glow_hdr_threshold = 0.95
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
 	env.fog_enabled = false
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	var key := DirectionalLight3D.new()
-	key.light_color = Color(0.85, 0.75, 0.9)
-	key.light_energy = 0.6
+	key.light_color = Color(1.0, 0.8, 0.62)
+	key.light_energy = 0.5
 	key.rotation = Vector3(deg_to_rad(-60), deg_to_rad(30), 0)
 	key.shadow_enabled = true
 	add_child(key)

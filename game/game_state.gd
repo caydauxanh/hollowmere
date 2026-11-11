@@ -136,6 +136,7 @@ var _dirty := false
 
 func _ready() -> void:
 	load_quality()
+	_install_font()
 	var args := OS.get_cmdline_user_args()
 	for arg in args:
 		if arg.begins_with("--hour="):
@@ -486,3 +487,38 @@ func pumpkin_days() -> int:
 	var a := Time.get_unix_time_from_datetime_dict({"year": int(p[0]), "month": int(p[1]), "day": int(p[2]), "hour": 0, "minute": 0, "second": 0})
 	var b := Time.get_unix_time_from_datetime_dict({"year": int(q[0]), "month": int(q[1]), "day": int(q[2]), "hour": 0, "minute": 0, "second": 0})
 	return int(round((b - a) / 86400.0))
+
+
+## House typeface: EB Garamond (SIL OFL), with the engine font as fallback for symbols.
+func _install_font() -> void:
+	var f: FontFile = load("res://assets/fonts/eb-garamond-latin-500-normal.woff2")
+	if f == null:
+		return
+	var fb: Array[Font] = []
+	for extra in ["res://assets/fonts/eb-garamond-latin-ext-500-normal.woff2", "res://assets/fonts/eb-garamond-vietnamese-500-normal.woff2", "res://assets/fonts/DejaVuSans.ttf"]:   # DejaVu: arrows, stars, ticks
+		var e: FontFile = load(extra)
+		if e:
+			fb.append(e)
+	var engine_font := ThemeDB.fallback_font
+	if engine_font != f:
+		fb.append(engine_font)
+	f.fallbacks = fb
+	var th := ThemeDB.get_default_theme()
+	th.default_font = f
+	ThemeDB.fallback_font = f
+	# Buttons: dark plate, thin brass edge.
+	for st in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = {"normal": Color(0.06, 0.06, 0.09, 0.82), "hover": Color(0.12, 0.11, 0.13, 0.9), "pressed": Color(0.2, 0.16, 0.1, 0.92), "focus": Color(0.06, 0.06, 0.09, 0.0), "disabled": Color(0.05, 0.05, 0.07, 0.6)}[st]
+		sb.border_color = Color(0.78, 0.64, 0.36, 0.95) if st in ["hover", "pressed"] else Color(0.42, 0.36, 0.24, 0.9)
+		sb.set_border_width_all(0 if st == "focus" else 1)
+		sb.set_corner_radius_all(2)
+		sb.content_margin_left = 10
+		sb.content_margin_right = 10
+		sb.content_margin_top = 5
+		sb.content_margin_bottom = 5
+		th.set_stylebox(st, "Button", sb)
+	th.set_color("font_color", "Button", Color(0.84, 0.78, 0.66))
+	th.set_color("font_hover_color", "Button", Color(0.98, 0.9, 0.7))
+	th.set_color("font_pressed_color", "Button", Color(1.0, 0.86, 0.55))
+	th.set_color("font_disabled_color", "Button", Color(0.5, 0.47, 0.42))
