@@ -1,0 +1,10 @@
+const fs=require('fs'),p=require('path');const d=__dirname;
+const order=['00-core','10-gfx','20-world','30-human','60-audio','50-ui','40-game','90-main'];
+const now=new Date(Date.now()+7*3600e3);const z=n=>String(n).padStart(2,'0');
+const build=process.argv[2]||`${now.getUTCFullYear()}${z(now.getUTCMonth()+1)}${z(now.getUTCDate())}-${z(now.getUTCHours())}${z(now.getUTCMinutes())}`;
+const game=order.map(f=>fs.readFileSync(p.join(d,'src',f+'.js'),'utf8')).join('\n');
+const three=fs.readFileSync(p.join(d,'dist/three.min.js'),'utf8');
+if(three.includes('</script'))throw new Error('script close in three');
+let html=fs.readFileSync(p.join(d,'page.html'),'utf8');
+html=html.replace('/*THREE*/',()=>three).replace('/*GAME*/',()=>game).replace('__BUILD__',()=>build);
+fs.writeFileSync(p.join(d,'dist/index.html'),html);console.log(build,html.length);

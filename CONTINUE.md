@@ -11,3 +11,11 @@ Live page: https://claude.ai/artifact/4jqS4QWaJ2Bb6XQRPw8zpK (owner must share "
 5. Screenshots: `xvfb-run godot --path . -- --fresh --hour=H --cam=x,z,yaw,pitch,dist --shot=out.png`.
 
 See PROGRESS.md for the full feature history and README.md for the player manual.
+
+## 2026-11-12 — Lanternlight remake (three.js) is now the live game
+The user rejected the Godot look and asked for a full redo in the style of loktar00's Lanternfall.
+The live artifact (same URL) now serves `lantern/dist/index.html`; the Godot project stays in this repo untouched.
+- Source: `lantern/src/*.js` (core, gfx HDR pipeline, world, human, audio, ui, game, main), template `lantern/page.html`.
+- Build: `node lantern/build.js` -> `lantern/dist/index.html` (three r160 inlined, single file). Publish that file to the artifact URL.
+- Tests (Playwright + swiftshader): `node lantern/flow.js` (full quest start to dawn), `node lantern/mob.js` (iPhone touch stick), `node lantern/shot.js out.png 1280 720 'q=high&skip=new&fix=1' '<js>'` for screenshots. Debug hooks: `window.__g`.
+- Next ideas: more villagers/quests, interiors, Academy visit after dawn, better faces/cloth, camera collision.

@@ -1,0 +1,82 @@
+<title>Hollowmere</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one full-screen canvas; a thin serif overlay sits on top (objective top-left, counts top-right, prompt and dialogue at the bottom). */
+:root{--bg:#07080c;--ink:#e9dfc8;--dim:#a79f8c;--brass:#b08d57;--flame:#f0a44c;--plate:rgba(7,8,12,.74);--line:rgba(176,141,87,.42);--serif:Georgia,"Iowan Old Style","Times New Roman",serif;color-scheme:dark}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+#touch{position:fixed;inset:0;touch-action:none}
+#hud{position:fixed;inset:0;pointer-events:none;transition:opacity 1.2s}
+#hud.off{opacity:0}
+.tl{position:absolute;left:max(16px,env(safe-area-inset-left));top:max(14px,env(safe-area-inset-top));max-width:min(62vw,420px);text-shadow:0 1px 6px #000}
+.kick{font-size:10.5px;letter-spacing:.34em;text-transform:uppercase;color:var(--brass)}
+#obj{font-size:15px;line-height:1.35;margin-top:5px;font-style:italic}
+.tr{position:absolute;right:max(16px,env(safe-area-inset-right));top:max(14px,env(safe-area-inset-top));text-align:right;font-size:12.5px;letter-spacing:.06em;color:var(--dim);text-shadow:0 1px 6px #000}
+.tr b{color:var(--ink);font-weight:normal;font-size:15px}
+#flame{margin:7px 0 0 auto;width:92px;height:3px;background:rgba(255,255,255,.12)}
+#flamefill{height:100%;width:100%;background:var(--flame);box-shadow:0 0 8px var(--flame);transition:width .3s}
+#flame.low #flamefill{background:#9fc4ff;box-shadow:0 0 8px #9fc4ff}
+#prompt{position:absolute;left:50%;bottom:max(86px,calc(env(safe-area-inset-bottom) + 76px));transform:translate(-50%,8px);opacity:0;transition:opacity .2s,transform .2s;background:var(--plate);border:1px solid var(--line);padding:9px 18px 9px 14px;font-size:14px;letter-spacing:.04em;white-space:nowrap;pointer-events:none;display:flex;align-items:center;gap:10px}
+#prompt.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#prompt i{font-style:normal;font-size:11px;border:1px solid var(--line);color:var(--brass);padding:1px 6px;letter-spacing:.1em}
+#act{position:absolute;right:max(22px,env(safe-area-inset-right));bottom:max(30px,calc(env(safe-area-inset-bottom) + 18px));width:74px;height:74px;border-radius:50%;border:1px solid var(--line);background:var(--plate);color:var(--ink);font:13px var(--serif);letter-spacing:.14em;text-transform:uppercase;display:none;align-items:center;justify-content:center;pointer-events:auto;opacity:.45;transition:opacity .2s,border-color .2s}
+#act.on{opacity:1;border-color:var(--flame);color:var(--flame)}
+@media (pointer:coarse){#act{display:flex}#prompt i{display:none}}
+#toast{position:absolute;left:50%;top:22%;transform:translateX(-50%);max-width:min(84vw,460px);text-align:center;font-size:14.5px;font-style:italic;line-height:1.45;opacity:0;transition:opacity .6s;text-shadow:0 1px 8px #000,0 0 18px #000}
+#toast.on{opacity:1}
+#card{position:absolute;left:0;right:0;top:30%;text-align:center;opacity:0;transition:opacity 1.6s;text-shadow:0 2px 18px #000}
+#card.on{opacity:1}
+#ctitle{font-size:clamp(26px,5.4vw,46px);letter-spacing:.22em;text-transform:uppercase;padding-left:.22em}
+#csub{font-size:14px;letter-spacing:.2em;color:var(--brass);margin-top:10px;text-transform:uppercase}
+#card hr{width:120px;border:0;border-top:1px solid var(--line);margin:12px auto 0}
+#talk{position:absolute;left:50%;bottom:max(22px,calc(env(safe-area-inset-bottom) + 14px));transform:translate(-50%,14px);width:min(92vw,620px);box-sizing:border-box;background:var(--plate);border:1px solid var(--line);padding:14px 20px 12px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none}
+#talk.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#tname{font-size:10.5px;letter-spacing:.3em;text-transform:uppercase;color:var(--brass)}
+#ttext{font-size:16px;line-height:1.5;margin-top:7px;min-height:4.5em}
+#tmore{font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--dim);text-align:right}
+#mark{position:absolute;left:-7px;top:-7px;width:14px;height:14px;display:none;will-change:transform}
+#mark:before{content:"";position:absolute;inset:2px;border:1px solid var(--flame);transform:rotate(45deg);box-shadow:0 0 8px var(--flame)}
+#mark.edge:after{content:"";position:absolute;left:3px;top:-9px;border:4px solid transparent;border-bottom:7px solid var(--flame)}
+#stick{position:fixed;width:104px;height:104px;border-radius:50%;border:1px solid var(--line);background:rgba(7,8,12,.25);display:none;pointer-events:none}
+#knob{position:absolute;left:32px;top:32px;width:40px;height:40px;border-radius:50%;background:rgba(233,223,200,.28);border:1px solid var(--line)}
+.bl{position:absolute;left:max(14px,env(safe-area-inset-left));bottom:max(8px,env(safe-area-inset-bottom));font-size:10.5px;letter-spacing:.08em;color:var(--dim);opacity:.7;display:flex;gap:14px;align-items:center}
+#snd{pointer-events:auto;background:none;border:0;color:inherit;font:inherit;letter-spacing:inherit;padding:6px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+#title{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:flex-end;padding:0 16px max(11vh,calc(env(safe-area-inset-bottom) + 40px));box-sizing:border-box;text-align:center;background:linear-gradient(to top,rgba(4,5,8,.9),rgba(4,5,8,.25) 46%,rgba(4,5,8,0) 70%)}
+#title.on{display:flex}
+#title h1{margin:0;font-weight:normal;font-size:clamp(30px,8vw,68px);letter-spacing:.3em;padding-left:.3em;text-transform:uppercase;text-shadow:0 2px 24px #000}
+#title .sub{font-size:12px;letter-spacing:.42em;padding-left:.42em;text-transform:uppercase;color:#d9b77c;margin-top:10px;text-shadow:0 1px 8px #000}
+#title p{max-width:440px;font-size:15px;line-height:1.55;font-style:italic;color:var(--ink);margin:20px 0 24px;text-shadow:0 1px 8px #000}
+#title button{font:14px var(--serif);letter-spacing:.3em;text-transform:uppercase;color:var(--ink);background:var(--plate);border:1px solid var(--line);padding:13px 30px 13px 34px;margin:0 6px;cursor:pointer}
+#title button:hover,#title button:focus-visible{border-color:var(--flame);color:var(--flame);outline:none}
+#title #fresh{color:var(--dim);font-size:11.5px;padding:10px 18px 10px 21px;margin-top:12px}
+#title small{display:block;margin-top:22px;font-size:11px;letter-spacing:.08em;color:var(--dim)}
+#err{position:fixed;left:12px;right:12px;top:12px;display:none;background:#2a0d0d;border:1px solid #a44;color:#fdd;font:12px/1.4 ui-monospace,monospace;padding:10px;white-space:pre-wrap;z-index:9}
+</style>
+<canvas id="c"></canvas>
+<div id="touch"></div>
+<div id="hud" class="off">
+  <div class="tl"><div class="kick">Hollowmere</div><div id="obj"></div></div>
+  <div class="tr"><div id="cnt"></div><div id="flame"><div id="flamefill"></div></div></div>
+  <div id="toast"></div>
+  <div id="card"><div id="ctitle"></div><hr><div id="csub"></div></div>
+  <div id="mark"></div>
+  <div id="prompt"><i>E</i><span id="ptext"></span></div>
+  <button id="act">Act</button>
+  <div id="talk"><div id="tname"></div><div id="ttext"></div><div id="tmore"></div></div>
+  <div class="bl"><span>build __BUILD__</span><button id="snd">Sound on</button></div>
+</div>
+<div id="stick"><div id="knob"></div></div>
+<div id="title">
+  <h1>Hollowmere</h1><div class="sub">Lanternlight</div>
+  <p>The seven waylights have gone out, and the gloom is walking in from the hills. Carry the flame.</p>
+  <div><button id="begin">Begin</button></div><div><button id="fresh">Start again</button></div>
+  <small>Move with WASD or the left thumb · drag to look · E or Act to use · Shift to run</small>
+</div>
+<div id="err"></div>
+<script>/*THREE*/</script>
+<script>
+window.addEventListener('error', function (e) { var b = document.getElementById('err'); b.style.display = 'block'; b.textContent = 'Error: ' + (e.message || e.type) + (e.lineno ? ' @' + e.lineno : '') + '\n' + navigator.userAgent.slice(0, 110); });
+/*GAME*/
+try { if (!document.createElement('canvas').getContext('webgl2')) throw new Error('WebGL2 is not available in this browser'); HM.start(); } catch (e) { var b = document.getElementById('err'); b.style.display = 'block'; b.textContent = 'Could not start: ' + (e && e.message || e) + '\n' + (e && e.stack || '').slice(0, 400); }
+</script>
