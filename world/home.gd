@@ -12,6 +12,7 @@ var _shot_frames := 0
 
 
 func _ready() -> void:
+	Toon.apply.call_deferred(self)
 	_build_environment()
 	_build_room(Vector3(0, 0, -4), 4, 3)
 	_build_furniture()

@@ -44,6 +44,8 @@ signal interacted
 
 ## Click-to-move target (set by HUD when the player clicks the ground). Routed through the NavGrid
 ## so a tap on the far side of a house walks around it.
+## Set by the HUD while the touch stick is held (0..1); -1 when not in use.
+var stick_mag := -1.0
 var move_target := Vector3.INF:
 	set(v):
 		move_target = v
@@ -152,7 +154,7 @@ func _physics_process(delta: float) -> void:
 	glow.light_energy = move_toward(glow.light_energy, 3.2 if g else 0.8, delta * 4.0)
 	glow.omni_range = move_toward(glow.omni_range, 12.0 if g else 3.5, delta * 12.0)
 	var cam := get_viewport().get_camera_3d()
-	var input := Input.get_vector("left", "right", "up", "down") if not GameState.ui_locked else Vector2.ZERO
+	var input := Input.get_vector("left", "right", "up", "down", 0.15) if not GameState.ui_locked else Vector2.ZERO
 	var dir := Vector3.ZERO
 	if cam and input != Vector2.ZERO:
 		var f := -cam.global_basis.z
@@ -184,8 +186,11 @@ func _physics_process(delta: float) -> void:
 				dir = to.normalized()
 
 	var busy := Time.get_ticks_msec() / 1000.0 < _busy_until
-	var running := Input.is_action_pressed("run")
+	# Touch stick: a gentle push strolls, a full push runs. Keyboard: Shift runs.
+	var running: bool = Input.is_action_pressed("run") or stick_mag > 0.9
 	var speed := run_speed if running else walk_speed
+	if stick_mag > 0.0 and not running:
+		speed *= clampf(stick_mag / 0.9, 0.45, 1.0)
 	if GameState.haste_active():
 		speed *= 1.35
 	if busy:

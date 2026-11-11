@@ -8,7 +8,25 @@ uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform float use_tex = 1.0;
 uniform float rim_strength = 0.18;
+global uniform float focus_dist;
+varying float vdist;
+varying float up_facing;
+varying float world_y;
+void vertex() {
+	world_y = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y;
+	vdist = length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
+	up_facing = (MODEL_MATRIX * vec4(NORMAL, 0.0)).y;
+}
 void fragment() {
+	// Walls and roofs between the camera and the player open a dithered window (floors never do).
+	float centre = length((SCREEN_UV - vec2(0.5, 0.48)) * vec2(1.7, 1.0));
+	float occl = clamp((focus_dist - 1.2 - vdist) / 1.5, 0.0, 1.0) * clamp((0.36 - centre) / 0.14, 0.0, 1.0) * (1.0 - step(0.75, up_facing) * step(world_y, 0.45));
+	float near = clamp((vdist - 0.6) / 1.2, 0.0, 1.0);
+	float keep = min(near, 1.0 - occl * 0.93);
+	if (keep < 0.999) {
+		float dith = fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715))));
+		if (keep < dith) { discard; }
+	}
 	vec4 c = albedo;
 	if (use_tex > 0.5) { c *= texture(albedo_tex, UV); }
 	ALBEDO = c.rgb;

@@ -10,6 +10,9 @@ extends Node3D
 var yaw := 0.0
 var pitch := -0.42
 var _lead := Vector3.ZERO
+## Cinematic override: when set, the rig sits on this point and slowly turns (intro shots).
+var cine_point := Vector3.INF
+var cine_spin := 0.0
 var _arm: SpringArm3D
 var _cam: Camera3D
 var _target: Node3D
@@ -62,6 +65,13 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	if cine_point != Vector3.INF:
+		global_position = cine_point
+		yaw += cine_spin * delta
+		_arm.spring_length = distance
+		RenderingServer.global_shader_parameter_set("focus_dist", 0.0)
+		_apply()
+		return
 	var pan := Input.get_vector("pan_left", "pan_right", "pan_up", "pan_down")
 	yaw -= pan.x * 2.0 * delta
 	pitch = clampf(pitch - pan.y * 1.2 * delta, min_pitch, max_pitch)

@@ -18,6 +18,7 @@ var _shot_frames := 0
 
 
 func _ready() -> void:
+	Toon.apply.call_deferred(self)
 	_build_environment()
 	_build_room(Vector3(0, 0, -6), 5, 5, "hall")        # great hall, 18 × 18
 	_build_room(Vector3(T * 4, 0, -4), 3, 3, "flame")   # east classroom

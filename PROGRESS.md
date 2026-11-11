@@ -122,3 +122,10 @@
 - Villagers walk their schedules along roads and over the bridge, stroll a few steps near their post and come back, face you when you approach, and stand on the nearest clear spot when a hand-placed post was inside a building box. Pets/sheep follow with rate-limited re-planning.
 - Fixed: hex-pack fences were rotated 90° and offset one tile (drawn as combs, colliders off the picture). `Village._fence_piece` places them on the line; gates have the door leaf hidden (open gateway); sheep pen is a closed ring with one opening. Trial Field is now reachable through its gate.
 - Tests: `tools/test_nav.gd` (routes, villagers arrive, nothing inside colliders), `tools/test_navacad.gd` (academy rooms), `tools/test_move.gd` (feel + tap routing + solid villagers); full suite re-run clean.
+
+## build 20261111 — story intro, quest compass, see-through walls, analog stick
+- Opening cinematic (`ui/intro.gd`): five slow night-to-morning shots telling the Quiet Night, tap/F to advance, Skip button; plays on the first Begin, then the Academy letter. Camera rig has a `cine_point` override.
+- Quest compass (HUD): a gold diamond over the current objective (villager with a request, the gate, a teacher, the nearest dark lantern, the Watchtower, Hatch's boat, the telescope…) with distance; turns into an edge arrow when off-screen; points at the door when the goal is in the other scene.
+- See-through occluders: the cel shader (now also indoors: academy, home, tavern) dithers away walls/roofs/props between the camera and the player and anything right against the lens; floors never fade.
+- Touch stick is analog: gentle push strolls, full push runs (deadzone 0.15). Debug line reduced to the build id.
+- Tests: `tools/test_intro.gd` (intro flow restores state, compass targets per chapter, stick speeds); full suite re-run clean.

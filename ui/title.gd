@@ -95,9 +95,13 @@ func _button(text: String, c: Color) -> Button:
 
 
 func _start() -> void:
+	if not GameState.intro_seen and get_parent().has_node("CameraRig"):
+		var intro := CanvasLayer.new()
+		intro.set_script(load("res://ui/intro.gd"))
+		get_parent().add_child(intro)
+		queue_free()
+		return
 	GameState.ui_locked = false
-	if not GameState.intro_seen and get_parent().has_method("start_sweep"):
-		get_parent().start_sweep()
 	var hud := get_parent().get_node_or_null("HUD")
 	if hud:
 		hud.show_intro_if_needed()

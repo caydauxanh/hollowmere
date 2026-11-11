@@ -14,6 +14,7 @@ var _candles: Array[Node3D] = []
 
 
 func _ready() -> void:
+	Toon.apply.call_deferred(self)
 	_build_environment()
 	_build_room(Vector3(0, 0, -5), 4, 4)
 	_build_furniture()

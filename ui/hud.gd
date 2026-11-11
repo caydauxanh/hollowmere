@@ -124,7 +124,7 @@ func _ready() -> void:
 	call_deferred("show_intro_if_needed")
 	_dbg = _label(12, Color(1, 1, 1, 0.7))
 	_dbg.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	_dbg.offset_left = -520
+	_dbg.offset_left = -230
 	_dbg.offset_top = -22
 	_dbg.add_theme_constant_override("outline_size", 4)
 	_dbg.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
@@ -269,6 +269,7 @@ func _update_stick(pos: Vector2) -> void:
 	_stick_vec = v / STICK_RADIUS
 	if _stick_vec.length() < 0.15:
 		_stick_vec = Vector2.ZERO
+	player.stick_mag = _stick_vec.length() if (_stick_touch != -1 and _stick_vec != Vector2.ZERO) else -1.0
 	Input.action_release("left")
 	Input.action_release("right")
 	Input.action_release("up")
@@ -348,7 +349,8 @@ func _process(delta: float) -> void:
 			_toast_time = 3.0 + minf(nxt.length() / 40.0, 3.0)
 			_toast.modulate.a = 1.0
 	_web_bridge(delta)
-	_dbg.text = "build 20261031-1428  ·  key: %s   mouse: %s   stick: %s   vel: %.1f" % [_last_key, _last_mouse, str(_stick_vec.snapped(Vector2(0.1, 0.1))), Vector2(player.velocity.x, player.velocity.z).length()]
+	_dbg.text = "build 20261111-1620  ·  Hollowmere"
+	_update_compass()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -1348,8 +1350,152 @@ func _web_bridge(delta: float) -> void:
 				for t in get_tree().current_scene.get_children():
 					if t.has_method("_start"):
 						t._start()
+				for t in get_tree().current_scene.get_children():
+					if t.has_method("finish_intro"):
+						t.finish_intro()
 				GameState.ui_locked = false
 			"hour":
 				GameState.forced_hour = float(parts[1])
 			"fly":
 				player.set_flying(parts[1] == "1")
+
+
+# ---------------------------------------------------------------- quest compass
+
+var _compass: Control
+var _compass_arrow: Polygon2D
+var _compass_lbl: Label
+var _compass_target := Vector3.INF
+var _compass_t := 0.0
+
+func _script_pos(file: String) -> Vector3:
+	for n in get_tree().get_nodes_in_group("interactable"):
+		var sc: Script = n.get_script()
+		if sc and sc.resource_path.get_file() == file:
+			return (n as Node3D).global_position
+	return Vector3.INF
+
+
+func _npc_pos(id: String) -> Vector3:
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is Villager and (n as Villager).npc_id == id:
+			return (n as Node3D).global_position
+	return Vector3.INF
+
+
+## Where the current objective is, in this scene (or the door that leads to it).
+func _objective_target() -> Vector3:
+	var scene := get_tree().current_scene.name
+	var in_v := scene == "Village"
+	var in_a := scene == "Academy"
+	if not in_v and not in_a:
+		return _script_pos("exit_door.gd")
+	var way_out := _script_pos("gate.gd") if in_v else _script_pos("exit_door.gd")
+	var here := "village" if in_v else "academy"
+	if not GameState.gate_open:
+		if GameState.ember < Story.EMBER_GATE:
+			for r in Story.todays_requests():
+				if not GameState.quests_done.has(r["id"]) and Story.NPCS[r["npc"]].get("scene", "village") == "village":
+					return _npc_pos(r["npc"])
+			return _script_pos("notice_board.gd")
+		return way_out
+	if GameState.order == "":
+		return _npc_pos("oriel") if in_a else way_out
+	var lid := Story.lesson_now()
+	if lid != "" and not GameState.lessons_done.has("%s/%s" % [Story.today_key(), lid]):
+		return _npc_pos(Story.LESSONS[lid]["teacher"]) if in_a else way_out
+	for r in Story.todays_requests():
+		if not GameState.quests_done.has(r["id"]):
+			return _npc_pos(r["npc"]) if Story.NPCS[r["npc"]].get("scene", "village") == here else way_out
+	if not GameState.spells.has("kindle"):
+		return _npc_pos("alder") if in_a else way_out
+	if not GameState.chapter2_done:
+		if not in_v:
+			return way_out
+		var best := Vector3.INF
+		var bd := 1e9
+		for n in get_tree().get_nodes_in_group("dark_lantern"):
+			if str(n.lantern_id).begins_with("village_") and not n.is_lit():
+				var d: float = (n as Node3D).global_position.distance_to(player.global_position)
+				if d < bd:
+					bd = d
+					best = (n as Node3D).global_position
+		return best
+	if not GameState.chapter3_done:
+		return _npc_pos("quill") if in_a else way_out
+	if not GameState.chapter4_done:
+		return _script_pos("telescope.gd") if in_a else way_out
+	if not GameState.chapter5_done:
+		return Vector3(59.5, 0.4, -58.0) if in_v else way_out
+	if not GameState.chapter6_done:
+		return _script_pos("boat.gd") if in_v else way_out
+	if not GameState.chapter7_done:
+		return _script_pos("telescope.gd") if in_a else way_out
+	return Vector3.INF
+
+
+func _build_compass() -> void:
+	_compass = Control.new()
+	_compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_compass)
+	move_child(_compass, 1)
+	_compass_arrow = Polygon2D.new()
+	_compass_arrow.polygon = PackedVector2Array([Vector2(0, -15), Vector2(11, 0), Vector2(0, 15), Vector2(-11, 0)])
+	_compass_arrow.color = Color(1.0, 0.82, 0.35, 0.95)
+	_compass.add_child(_compass_arrow)
+	var inner := Polygon2D.new()
+	inner.polygon = PackedVector2Array([Vector2(0, -8), Vector2(6, 0), Vector2(0, 8), Vector2(-6, 0)])
+	inner.color = Color(0.25, 0.14, 0.3, 0.9)
+	_compass_arrow.add_child(inner)
+	_compass_lbl = _label(13, Color(1.0, 0.92, 0.7))
+	_compass_lbl.add_theme_constant_override("outline_size", 6)
+	_compass_lbl.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.2))
+	_compass_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_compass_lbl.size = Vector2(80, 18)
+	_compass.add_child(_compass_lbl)
+
+
+func _update_compass() -> void:
+	if _compass == null:
+		_build_compass()
+	_compass_t -= get_process_delta_time()
+	if _compass_t <= 0.0:
+		_compass_t = 0.5
+		_compass_target = _objective_target()
+	var cam := get_viewport().get_camera_3d()
+	var show := cam != null and _compass_target != Vector3.INF and not _dlg_open and not _journal.visible and not _photo and not GameState.ui_locked
+	var world := _compass_target + Vector3(0, 2.6, 0)
+	var dist := 0.0
+	if show:
+		dist = Vector2(_compass_target.x - player.global_position.x, _compass_target.z - player.global_position.z).length()
+		show = dist > 3.5
+	_compass.visible = show
+	if not show:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	var sp := cam.unproject_position(world)
+	var behind := cam.is_position_behind(world)
+	var c := vp * 0.5
+	if behind:
+		sp = c - (sp - c)
+	var m := Vector2(46, 130)
+	var inside := not behind and sp.x > m.x and sp.x < vp.x - m.x and sp.y > m.y and sp.y < vp.y - 150.0
+	if not inside:
+		var dir := (sp - c)
+		if dir.length() < 1.0:
+			dir = Vector2(0, -1)
+		dir = dir.normalized()
+		if behind:
+			dir.y = absf(dir.y) * 0.3 + 0.2   # things behind you point down-and-sideways
+			dir = dir.normalized()
+		var kx := (vp.x * 0.5 - m.x) / maxf(absf(dir.x), 0.001)
+		var ky := ((vp.y * 0.5 - m.y) if dir.y < 0.0 else (vp.y * 0.5 - 150.0)) / maxf(absf(dir.y), 0.001)
+		sp = c + dir * minf(kx, ky)
+		_compass_arrow.rotation = dir.angle() + PI / 2.0
+		_compass_arrow.scale = Vector2(0.8, 1.5)
+	else:
+		_compass_arrow.rotation = 0.0
+		_compass_arrow.scale = Vector2.ONE * (1.0 + 0.12 * sin(Time.get_ticks_msec() / 220.0))
+	_compass_arrow.position = sp
+	_compass_lbl.text = "%d m" % int(dist)
+	_compass_lbl.position = sp + Vector2(-40, 16)
